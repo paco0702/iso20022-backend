@@ -77,17 +77,16 @@ def create_table(session):
 
     session.execute(
         """
-        CREATE TABLE IF NOT EXISTS user_by_created_at
-        (
-         created_at timestamp,
-         id uuid,
-         email text,
-         full_name_en text,
-         full_name_ch text,
-         hashed_password text,
-         is_active boolean,
-         is_verified boolean, 
-         updated_at timestamp)"""
+        CREATE TABLE IF NOT EXISTS user_repair_tasks (
+            user_id uuid,
+            task_type text,
+            email text,
+            reason text,
+            attempts int,
+            last_error text,
+            PRIMARY KEY (user_id, task_type)
+        )
+        """
     )
 
 def close_cassandra_connection():
