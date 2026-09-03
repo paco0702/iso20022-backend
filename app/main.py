@@ -11,6 +11,7 @@ from app.routers import auth
 @asynccontextmanager
 async def lifespan (app: FastAPI):
     # Startup
+    print("Starting app...")
     get_cassandra_session()
 
     yield
@@ -20,6 +21,7 @@ async def lifespan (app: FastAPI):
 
 
 app = FastAPI(
+    lifespan = lifespan,
     title=settings.app_name,
     version=settings.app_version
 )

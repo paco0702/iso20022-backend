@@ -1,10 +1,9 @@
 from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
-
-from cassandra.query import SimpleStatement
+from cassandra.query import (SimpleStatement, BatchStatement, ConsistencyLevel)
 from app.db.cassandra import get_cassandra_session
-
+from pydantic import EmailStr
 
 def get_user_by_email(email: str) -> Optional[dict]:
     session = get_cassandra_session()
@@ -36,62 +35,95 @@ def get_user_by_id(user_id: UUID) -> Optional[dict]:
 
     return row
 
-
-def insert_email_user(
-        email: str,
-        hashed_password: str,
-        user_id: UUID,
-        created_at: Optional[datetime] = None,
-        full_name: Optional[str] = None) -> bool:
+def insert_user(user) -> bool:
     session = get_cassandra_session()
-
-    is_active = True
-    is_verified = False
-
-    result = session.execute(
+    batch =  BatchStatement(consistency_level=ConsistencyLevel.QUORUM)
+    batch.add(
         """
-        INSERT INTO users_by_email (email,
-                                    id,
-                                    full_name,
-                                    hashed_password,
-                                    is_active,
-                                    is_verified,
-                                    created_at,
-                                    updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
+        INSERT INTO user_by_email (email,
+                                   id,
+                                   full_name_en,
+                                   full_name_ch,
+                                   hashed_password,
+                                   is_active,
+                                   is_verified,
+                                   created_at,
+                                   updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
         """,
-        [email, user_id, full_name, hashed_password, is_active, is_verified, created_at, created_at],
+        [user["email"], user["id"], user["full_name_en"], user["full_name_ch"], user["hashed_password"],
+         user["is_active"], user["is_verified"],
+         user["created_at"], user["created_at"]]
     )
-    row = result.one()
-    return bool(row.applied)
-
-
-def insert_user_by_id(
-        email: str,
-        hashed_password: str,
-        user_id: UUID,
-        created_at: Optional[datetime] = None,
-        full_name: Optional[str] = None) -> bool:
-    session = get_cassandra_session()
-    is_active = True
-    is_verified = False
-
-    result = session.execute(
+    batch.add(
         """
-        INSERT INTO users_by_id (id,
+        INSERT INTO user_by_id (id,
                                  email,
-                                 full_name,
+                                 full_name_en,
+                                 full_name_ch,
                                  hashed_password,
                                  is_active,
                                  is_verified,
                                  created_at,
                                  updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
         """,
-        [user_id, email, full_name, hashed_password, is_active, is_verified, created_at, created_at]
+        [user["id"], user["email"], user["full_name_en"], user["full_name_ch"], user["hashed_password"],
+         user["is_active"], user["is_verified"],
+         user["created_at"], user["created_at"]]
+    )
+    result = session.execute(batch)
+    row = result.one()
+    return bool(row["[applied]"])
+
+def insert_user_by_email(user) -> bool:
+    session = get_cassandra_session()
+    print("user to be registered: ", user)
+    result = session.execute(
+        """
+        INSERT INTO user_by_email (email,
+                                    id,
+                                    full_name_en,
+                                    full_name_ch,
+                                    hashed_password,
+                                    is_active,
+                                    is_verified,
+                                    created_at,
+                                    updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
+        """,
+        [user["email"], user["id"], user["full_name_en"], user["full_name_ch"], user["hashed_password"], user["is_active"], user["is_verified"],
+         user["created_at"], user["created_at"]]
     )
     row = result.one()
-    return bool(row.applied)
+    print("user inserted ", row)
+    return bool(row["[applied]"])
+
+
+def insert_user_by_id(
+        user) -> bool:
+    session = get_cassandra_session()
+
+    result = session.execute(
+        """
+        INSERT INTO user_by_id (id,
+                                email,
+                                full_name_en,
+                                full_name_ch,
+                                hashed_password,
+                                is_active,
+                                is_verified,
+                                created_at,
+                                updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
+        """,
+        [user["id"], user["email"], user["full_name_en"], user["full_name_ch"], user["hashed_password"],
+         user["is_active"], user["is_verified"],
+         user["created_at"], user["created_at"]]
+    )
+    row = result.one()
+    print("user inserted ", row)
+    return bool(row["[applied]"])
 
 
 def get_user_by_email(email: str) -> None:
@@ -160,3 +192,29 @@ def _row_to_dic(row):
         "created_at": row.created_at,
         "updated_at": row.updated_at,
     }
+
+def rollback_inserted_record(user):
+    delete_user_by_email(user.email)
+    delete_user_by_id(user.id)
+
+
+def delete_user_by_email(email:EmailStr):
+    session = get_cassandra_session()
+    session.execute(
+        """
+        DELETE FROM user_by_email
+        WHERE email = %s
+        """,
+        [email],
+    )
+
+
+def delete_user_by_id(user_id):
+    session = get_cassandra_session()
+    session.execute(
+        """
+        DELETE FROM user_by_id
+        WHERE id = %s
+        """,
+        [user_id],
+    )

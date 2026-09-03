@@ -3,13 +3,13 @@ import os
 from cassandra.cluster import Cluster
 from cassandra.query import dict_factory
 
-
-CASSANDRA_CONNECTION_PONITS = ["127.0.0.1"]
+CASSANDRA_CONNECTION_POINTS = ["127.0.0.1"]
 CASSANDRA_PORT = 9042
-CASSANDRA_KEYSPACE = "app_auth"
+CASSANDRA_KEYSPACE = "myapp"
 
 cluster = None
 session = None
+
 
 def get_cassandra_session():
     global cluster
@@ -19,7 +19,7 @@ def get_cassandra_session():
         return session
 
     cluster = Cluster(
-        contact_points=CASSANDRA_CONNECTION_PONITS,
+        contact_points=CASSANDRA_CONNECTION_POINTS,
         port=CASSANDRA_PORT,
     )
 
@@ -27,7 +27,7 @@ def get_cassandra_session():
 
     session.execute(
         """
-        CREATE KEYSPACE IF NOT EXISTS app_auth 
+        CREATE KEYSPACE IF NOT EXISTS myapp
         WITH replication = {
          'class': 'SimpleStrategy', 
          'replication_factor': 1 
@@ -39,22 +39,25 @@ def get_cassandra_session():
     session.row_factory = dict_factory
 
     create_table(session)
+    print("Created tables.")
     return session
 
 
 def create_table(session):
     session.execute(
         """
-        CREATE TABLE IF NOT EXISTS user_by_email (
-        email text primary key,
-        id uuid,
-        full_name_en text,
-        full_name_ch text,
-        hashed_password text,
-        is_active boolean,
-        is_verified boolean,
-        created_at timestamp,
-        updated_at timestamp)
+        CREATE TABLE IF NOT EXISTS user_by_email
+        (
+            email text PRIMARY KEY,
+            id uuid,
+            full_name_en text,
+            full_name_ch text,
+            hashed_password text,
+            is_active boolean,
+            is_verified boolean,
+            created_at timestamp,
+            updated_at timestamp
+        )
         """
     )
 
@@ -67,8 +70,8 @@ def create_table(session):
             full_name_en text,
             full_name_ch text,
             hashed_password text,
-            is_active boolean
-            is_verified boolean 
+            is_active boolean,
+            is_verified boolean,
             created_at timestamp,
             updated_at timestamp
         )
@@ -81,6 +84,9 @@ def create_table(session):
             user_id uuid,
             task_type text,
             email text,
+            full_name_en text,
+            full_name_ch text,
+            created_at timestamp,
             reason text,
             attempts int,
             last_error text,
@@ -89,8 +95,15 @@ def create_table(session):
         """
     )
 
+
 def close_cassandra_connection():
     global cluster
+    global session
+
+    if session:
+        session.shutdown()
+        session = None
+
     if cluster:
         cluster.shutdown()
-
+        cluster = None
