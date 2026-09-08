@@ -99,7 +99,6 @@ def insert_user_by_email(user) -> bool:
     print("user inserted ", row)
     return bool(row["[applied]"])
 
-
 def insert_user_by_id(
         user) -> bool:
     session = get_cassandra_session()
@@ -127,7 +126,7 @@ def insert_user_by_id(
 
 
 def get_user_by_email(email: str) -> None:
-    """
+    """f
     :param email:
     :return:
     """
@@ -143,7 +142,7 @@ def get_user_by_email(email: str) -> None:
                is_verified,
                created_at,
                updated_at
-        FROM users_by_email
+        FROM user_by_email
         WHERE email = %s
         """,
         [email],
@@ -169,7 +168,7 @@ def get_user_by_id(user_id: UUID) -> None:
                is_verified,
                created_at,
                updated_at
-        FROM users_by_id
+        FROM user_by_id
         WHERE id = %s
         """,
         [user_id],
@@ -185,7 +184,7 @@ def _row_to_dic(row):
     return {
         "id": row.id,
         "email": row.email,
-        "full_name": row.full_name,
+        "full_name_en": row.full_name_en,
         "hashed_password": row.hashed_password,
         "is_active": row.is_active,
         "is_verified": row.is_verified,
@@ -218,3 +217,15 @@ def delete_user_by_id(user_id):
         """,
         [user_id],
     )
+
+def  get_user_by_email_and_password (email, password):
+    session = get_cassandra_session()
+    result = session.execute(
+        """
+        SELECT COUNT(*) == 1 
+        FROM user_by_email
+        WHERE email = %s AND hashed_password = %s
+        """,
+        [email, password],
+    )
+    print("result ", result)

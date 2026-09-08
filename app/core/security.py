@@ -5,10 +5,7 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
-
-SECRET_KEY = settings.secret_key
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+from pydantic import EmailStr
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -16,7 +13,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_context.verify(plain_password, hashed_password)
 
 def create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
 
     payload = {
         "sub": subject,
@@ -25,15 +22,16 @@ def create_access_token(subject: str) -> str:
 
     return jwt.encode(
         payload,
-        SECRET_KEY,
-        algorithm=ALGORITHM)
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,)
+
 
 def decode_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(
             token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM],
+            settings.jwt_secret_key,
+            algorithms=[settings.jwt_algorithm],
         )
 
         subject = payload.get("sub")

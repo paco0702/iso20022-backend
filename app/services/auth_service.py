@@ -3,19 +3,25 @@ from uuid import uuid4
 
 from pydantic import EmailStr
 from app.repositories.user_repository import (insert_user_by_email, insert_user_by_id, insert_user,
-                                              rollback_inserted_record, delete_user_by_email)
+                                              rollback_inserted_record, delete_user_by_email, get_user_by_email, get_user_by_email_and_password)
 from app.repositories.user_repair_repository import (upsert_user_repair_task)
-from app.schemas.auth import RegisterRequest
+from app.schemas.auth import RegisterRequest, LoginRequest, LoginResponse
 
 from fastapi import HTTPException, status
 from app.core.retry import retry
 from app.util.encod_util import hash_password
 
-def start_login(email: EmailStr):
-    return {
-        "message": "Magic sign-in link sent",
-        "email": email,
-    }
+def start_login(request: LoginRequest):
+    get_user_by_email_and_password(request.email, hash_password(request.password))
+
+def validate_email(email: EmailStr):
+    user = get_user_by_email(email)
+    # if user exist, then email is not valid
+    if not user is not None:
+        return False
+    else :
+        return True
+
 
 def register_user(request: RegisterRequest):
     """
@@ -35,20 +41,24 @@ def register_user(request: RegisterRequest):
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
-    inserted_into_email = False
-    inserted_into_id = False
+    applied_by_email = insert_user_by_email(user)
 
-    applied = insert_user_by_email(user)
-    inserted_into_email = True
-
-    print("applied: ", applied)
-    if not applied and inserted_into_email:
-       delete_user_by_email(user["email"])
+    print("applied by email: ", applied_by_email)
+    if not applied_by_email:
        raise HTTPException(
-                    status_code=status.HTTP_409_BAD_REQUEST,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Register information not valid")
 
-    insert_user_by_id(user)
+    applied_by_id = insert_user_by_id(user)
+    if not applied_by_id:
+        if applied_by_email:
+            delete_user_by_email(user["email"])
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Register information not valid"
+        )
+
     return user
     # try:
     #     applied = retry (

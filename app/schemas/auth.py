@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr
 
 class LoginRequest(BaseModel):
     email: EmailStr
+    password: str
 
 class LoginResponse(BaseModel):
     message: str
@@ -16,7 +17,6 @@ class RegisterRequest(BaseModel):
     full_name_en: str
     full_name_ch: Optional[str] = None
 
-
 class RegisterResponse(BaseModel):
     id: UUID
     email: EmailStr
@@ -27,6 +27,12 @@ class RegisterResponse(BaseModel):
     is_verified: bool
     created_at: datetime
     updated_at: datetime
+
+class CheckEmailRequest(BaseModel):
+    email: EmailStr
+
+class CheckEmailResponse(BaseModel):
+    existing: bool
 
 class TokenResponse(BaseModel):
     access_token: str
