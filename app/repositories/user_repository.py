@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 from uuid import UUID, uuid4
 from cassandra.query import (SimpleStatement, BatchStatement, ConsistencyLevel)
 from app.db.cassandra import get_cassandra_session
@@ -11,14 +11,13 @@ def get_user_by_email(email: str) -> Optional[dict]:
     statement = SimpleStatement(
         """
         SELECT *
-        FROM users_by_email
+        FROM user_by_email
         WHERE email = %s
         """
     )
 
     row = session.execute(statement, [email]).one()
-
-    return row
+    return _row_user_dic(row)
 
 
 def get_user_by_id(user_id: UUID) -> Optional[dict]:
@@ -124,34 +123,7 @@ def insert_user_by_id(
     print("user inserted ", row)
     return bool(row["[applied]"])
 
-
-def get_user_by_email(email: str) -> None:
-    """f
-    :param email:
-    :return:
-    """
-    session = get_cassandra_session()
-
-    row = session.execute(
-        """
-        SELECT email,
-               id,
-               full_name,
-               hashed_password,
-               is_active,
-               is_verified,
-               created_at,
-               updated_at
-        FROM user_by_email
-        WHERE email = %s
-        """,
-        [email],
-    ).one()
-
-    return _row_to_dic(row)
-
-
-def get_user_by_id(user_id: UUID) -> None:
+def get_user_by_id(user_id: UUID) -> Optional[dict[str, Any]]:
     """
     :param user_id:
     :return:
@@ -174,22 +146,22 @@ def get_user_by_id(user_id: UUID) -> None:
         [user_id],
     ).one()
 
-    return _row_to_dic(row)
+    return _row_user_dic(row)
 
-
-def _row_to_dic(row):
+def _row_user_dic(row):
     if row is None:
         return None
 
     return {
-        "id": row.id,
-        "email": row.email,
-        "full_name_en": row.full_name_en,
-        "hashed_password": row.hashed_password,
-        "is_active": row.is_active,
-        "is_verified": row.is_verified,
-        "created_at": row.created_at,
-        "updated_at": row.updated_at,
+        "id": row["id"],
+        "email": row["email"],
+        "full_name_en": row["full_name_en"],
+        "full_name_ch": row["full_name_ch"],
+        "hashed_password": row["hashed_password"],
+        "is_active": row["is_active"],
+        "is_verified": row["is_verified"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
     }
 
 def rollback_inserted_record(user):
@@ -217,15 +189,3 @@ def delete_user_by_id(user_id):
         """,
         [user_id],
     )
-
-def  get_user_by_email_and_password (email, password):
-    session = get_cassandra_session()
-    result = session.execute(
-        """
-        SELECT COUNT(*) == 1 
-        FROM user_by_email
-        WHERE email = %s AND hashed_password = %s
-        """,
-        [email, password],
-    )
-    print("result ", result)

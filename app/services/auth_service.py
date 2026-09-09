@@ -2,17 +2,47 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from pydantic import EmailStr
-from app.repositories.user_repository import (insert_user_by_email, insert_user_by_id, insert_user,
-                                              rollback_inserted_record, delete_user_by_email, get_user_by_email, get_user_by_email_and_password)
+from app.repositories.user_repository import (insert_user_by_email, insert_user_by_id, delete_user_by_email, get_user_by_email)
 from app.repositories.user_repair_repository import (upsert_user_repair_task)
 from app.schemas.auth import RegisterRequest, LoginRequest, LoginResponse
-
+from app.util import encod_util
 from fastapi import HTTPException, status
-from app.core.retry import retry
-from app.util.encod_util import hash_password
+from app.core.security import (hash_password, verify_password, create_access_token)
 
 def start_login(request: LoginRequest):
-    get_user_by_email_and_password(request.email, hash_password(request.password))
+    user = get_user_by_email(request.email)
+
+    if request.email is None or request.email == "" or request.password is None or request.password == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email or password not provided"
+        )
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    if not verify_password(request.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password not match"
+        )
+
+    token = create_access_token(str(user["id"]), user["email"])
+
+    print("user: ", user)
+    response = {
+        "token": token,
+        "user_id": user["id"],
+        "email": user["email"],
+        "full_name_en": user["full_name_en"],
+        "full_name_ch": user["full_name_ch"],
+        "created_at": user["created_at"],
+        "updated_at": user["updated_at"],
+    }
+    return response
 
 def validate_email(email: EmailStr):
     user = get_user_by_email(email)

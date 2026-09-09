@@ -8,8 +8,11 @@ class LoginRequest(BaseModel):
     password: str
 
 class LoginResponse(BaseModel):
-    message: str
+    token: str
+    user_id: UUID
     email: EmailStr
+    full_name_en: str
+    full_name_ch: str
 
 class RegisterRequest(BaseModel):
     email: EmailStr
