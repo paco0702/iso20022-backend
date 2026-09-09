@@ -1,14 +1,15 @@
 from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import uuid4
+
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 import bcrypt
-from pydantic import EmailStr
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 def create_access_token(user_id: str, email: str):
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
@@ -17,6 +18,24 @@ def create_access_token(user_id: str, email: str):
         "email": email,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
+    }
+
+    return jwt.encode(
+        payload,
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm)
+
+def create_refresh_token(user_id: str, email: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        days=REFRESH_TOKEN_EXPIRE_DAYS
+    )
+
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "type": "refresh",
+        "jti": str(uuid4()),
+        "exp": expire,
     }
 
     return jwt.encode(
@@ -36,12 +55,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
     password_bytes = password.encode("utf-8")
     hashed_password_bytes = hashed_password.encode("utf-8")
 
-    result = bcrypt.checkpw(password_bytes, hashed_password_bytes)
-    print("check password result: ", result)
-
-    return result
-
-
+    return bcrypt.checkpw(password_bytes, hashed_password_bytes)
 
 def decode_token(token: str) -> Optional[str]:
     try:

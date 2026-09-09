@@ -1,13 +1,15 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from jose import JWTError
 from pydantic import EmailStr
+
+from app.core.config import Settings
 from app.repositories.user_repository import (insert_user_by_email, insert_user_by_id, delete_user_by_email, get_user_by_email)
 from app.repositories.user_repair_repository import (upsert_user_repair_task)
-from app.schemas.auth import RegisterRequest, LoginRequest, LoginResponse
-from app.util import encod_util
-from fastapi import HTTPException, status
-from app.core.security import (hash_password, verify_password, create_access_token)
+from app.schemas.auth import RegisterRequest, LoginRequest, LoginResponse, RefreshTokenRequest
+from fastapi import HTTPException, status, Response
+from app.core.security import (hash_password, verify_password, create_access_token, create_refresh_token, decode_token)
 
 def start_login(request: LoginRequest):
     user = get_user_by_email(request.email)
@@ -30,11 +32,13 @@ def start_login(request: LoginRequest):
             detail="Password not match"
         )
 
-    token = create_access_token(str(user["id"]), user["email"])
-
-    print("user: ", user)
+    access_token = create_access_token(str(user["id"]), user["email"])
+    refresh_token = create_refresh_token(str(user["id"]), user["email"])
+    print("refresh token: ", refresh_token)
     response = {
-        "token": token,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
         "user_id": user["id"],
         "email": user["email"],
         "full_name_en": user["full_name_en"],
@@ -51,7 +55,6 @@ def validate_email(email: EmailStr):
         return False
     else :
         return True
-
 
 def register_user(request: RegisterRequest):
     """
@@ -117,4 +120,45 @@ def register_user(request: RegisterRequest):
     #         detail="User registration is temporarily unavailable. Please try again later."
     #     )
 
+def refresh_user_token(request: RefreshTokenRequest):
+    refresh_token = request.refresh_token
+    if refresh_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing refresh token",
+        )
+
+    try:
+        payload = decode_token(refresh_token)
+
+        if payload.get("type") != "refresh":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token type",
+            )
+
+        user_id = payload.get("sub")
+        email = payload.get("email")
+
+        if user_id is None or email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token",
+            )
+
+        new_access_token = create_access_token(
+            user_id=user_id,
+            email=email,
+        )
+
+        return {
+            "access_token": new_access_token,
+            "token_type": "bearer",
+        }
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
 

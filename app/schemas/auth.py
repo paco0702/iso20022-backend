@@ -8,11 +8,14 @@ class LoginRequest(BaseModel):
     password: str
 
 class LoginResponse(BaseModel):
-    token: str
+    access_token: str
+    refresh_token: str
     user_id: UUID
     email: EmailStr
     full_name_en: str
     full_name_ch: str
+    created_at: datetime
+    updated_at: datetime
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -45,3 +48,7 @@ class CurrentUserResponse(BaseModel):
     id: UUID
     email: EmailStr
     full_name_en: Optional[str]
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+

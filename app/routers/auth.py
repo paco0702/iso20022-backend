@@ -1,6 +1,8 @@
-from fastapi import APIRouter
+from authlib.oauth2.rfc6749.grants import refresh_token
+from fastapi import APIRouter, Response, HTTPException, status
 
-from app.schemas.auth import LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, CheckEmailResponse, CheckEmailRequest
+from app.schemas.auth import RefreshTokenRequest
+from app.services import auth_service
 from app.services.auth_service import start_login, register_user, validate_email
 from pydantic import EmailStr
 
@@ -9,15 +11,6 @@ router = APIRouter(
     tags=["Auth"],
 )
 
-@router.post("/auth/login", response_model=LoginResponse)
-def login(request: LoginRequest):
-    print ("request: ", request)
-    return start_login(request)
-
-@router.get('/validate-email', response_model=CheckEmailResponse)
-def validate_email(email: EmailStr):
-    return validate_email(email)
-
-@router.post("/auth/register", response_model=RegisterResponse)
-def register(request: RegisterRequest):
-    return register_user(request)
+@router.post("/refresh")
+def refresh_access_token(request: RefreshTokenRequest):
+    return auth_service.refresh_user_token(request=request)
