@@ -120,8 +120,7 @@ def register_user(request: RegisterRequest):
     #         detail="User registration is temporarily unavailable. Please try again later."
     #     )
 
-def refresh_user_token(request: RefreshTokenRequest):
-    refresh_token = request.refresh_token
+def refresh_user_token(refresh_token: str):
     if refresh_token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -130,6 +129,7 @@ def refresh_user_token(request: RefreshTokenRequest):
 
     try:
         payload = decode_token(refresh_token)
+        print("payload: ", payload)
 
         if payload.get("type") != "refresh":
             raise HTTPException(

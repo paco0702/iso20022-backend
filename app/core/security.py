@@ -57,7 +57,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
     return bcrypt.checkpw(password_bytes, hashed_password_bytes)
 
-def decode_token(token: str) -> Optional[str]:
+def decode_token(token: str):
     try:
         payload = jwt.decode(
             token,
@@ -66,10 +66,10 @@ def decode_token(token: str) -> Optional[str]:
         )
 
         subject = payload.get("sub")
-
+        print("subject: ", payload)
         if subject is None:
             return None
 
-        return subject
+        return payload
     except JWTError:
         return None

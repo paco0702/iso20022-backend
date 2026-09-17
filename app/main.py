@@ -6,7 +6,8 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.db.cassandra import close_cassandra_connection, get_cassandra_session
 from app.core.config import settings
-from app.routers import public_auth
+from app.routers import public_auth, auth
+
 
 @asynccontextmanager
 async def lifespan (app: FastAPI):
@@ -39,6 +40,7 @@ app.add_middleware(
 )
 
 app.include_router(public_auth.router)
+app.include_router(auth.router)
 
 @app.get("/")
 def root():
