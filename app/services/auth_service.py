@@ -4,9 +4,7 @@ from uuid import uuid4
 from jose import JWTError
 from pydantic import EmailStr
 
-from app.core.config import Settings
 from app.repositories.user_repository import (insert_user_by_email, insert_user_by_id, delete_user_by_email, get_user_by_email)
-from app.repositories.user_repair_repository import (upsert_user_repair_task)
 from app.schemas.auth import RegisterRequest, LoginRequest, LoginResponse, RefreshTokenRequest
 from fastapi import HTTPException, status, Response
 from app.core.security import (hash_password, verify_password, create_access_token, create_refresh_token, decode_token)
