@@ -5,7 +5,11 @@ from app.util import payment_util, datetime_util
 from app.repositories.payment_repository import insert_payment_by_id
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse
 
-def create_payment(request: CreatePaymentRequest):
+def create_payment(request: CreatePaymentRequest, user_id):
+
+    if request.id is None or request.id == '':
+        raise HTTPException(status_code=400, detail="Payment id is required")
+
     if request.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
@@ -22,6 +26,8 @@ def create_payment(request: CreatePaymentRequest):
     execute_date = datetime_util.to_iso_8601_format(request.execute_date)
     request_id = UUID(request.id)
     payment = {
+        "created_by": UUID(user_id),
+        "updated_by": UUID(user_id),
         "id": request_id,
         "amount": request.amount,
         "currency": request.currency,

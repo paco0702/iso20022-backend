@@ -3,10 +3,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import uuid4
 
+from fastapi import HTTPException, Depends, security
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from starlette import status
 from app.core.config import settings
 import bcrypt
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+security = HTTPBearer()
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 REFRESH_TOKEN_EXPIRE_DAYS = 7
@@ -73,3 +78,25 @@ def decode_token(token: str):
         return payload
     except JWTError:
         return None
+
+def get_user_id_by_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
+    token = credentials.credentials
+
+    try:
+        payload = decode_token(token)
+
+        user_id = payload.get("sub")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token missing user id"
+            )
+
+        return user_id
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )

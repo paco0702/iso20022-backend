@@ -116,8 +116,10 @@ def create_table(session):
             message_id text,
             initial_party text,
             transaction_no int,
-            code text, 
-            invoice_number text
+            code text,  
+            invoice_number text,
+            created_by UUID,
+            updated_by UUID
         )
         """
     )

@@ -27,13 +27,16 @@ def insert_payment_by_id(payment) -> bool:
                 initial_party,
                 transaction_no,
                 code,
-                invoice_number)
-        VALUES ( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTs     
+                invoice_number,
+                created_by,
+                updated_by)
+        VALUES ( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTs     
         """,
         [payment["id"], payment["amount"], payment["currency"], payment["execute_date"],
          payment["end_to_end_id"], payment["remittance"], payment["charge_bearer"], payment["debtor_name"], payment["debtor_bic"],
          payment["debtor_iban"], payment["creditor_name"], payment["creditor_bic"], payment["creditor_iban"], payment["created_at"],
-         payment["updated_at"], payment["message_id"], payment["initial_party"], payment["transaction_no"], payment["code"], payment["invoice_number"]]
+         payment["updated_at"], payment["message_id"], payment["initial_party"], payment["transaction_no"], payment["code"], payment["invoice_number"],
+         payment["created_by"], payment["updated_by"]]
     )
     row = result.one()
     print("Payment was successfully inserted", row)
