@@ -7,7 +7,7 @@ from starlette.responses import JSONResponse
 
 from app.core.security import get_user_id_by_token
 from app.data.payment_constant import PaymentStatus
-from app.services.payment_service import create_payment, retrieve_payment, approve_payment, update_payment
+from app.services.payment_service import create_payment, retrieve_payment, update_payment
 
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse
 
