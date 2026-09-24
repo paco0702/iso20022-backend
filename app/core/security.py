@@ -16,6 +16,7 @@ security = HTTPBearer()
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
+
 def create_access_token(user_id: str, email: str):
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     payload = {
@@ -29,6 +30,7 @@ def create_access_token(user_id: str, email: str):
         payload,
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm)
+
 
 def create_refresh_token(user_id: str, email: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
@@ -48,6 +50,7 @@ def create_refresh_token(user_id: str, email: str) -> str:
         settings.jwt_secret_key,
         algorithm=settings.jwt_algorithm)
 
+
 def hash_password(password: str) -> str:
     password_bytes = password.encode("utf-8")
 
@@ -56,11 +59,13 @@ def hash_password(password: str) -> str:
 
     return hashed.decode("utf-8")
 
+
 def verify_password(password: str, hashed_password: str) -> bool:
     password_bytes = password.encode("utf-8")
     hashed_password_bytes = hashed_password.encode("utf-8")
 
     return bcrypt.checkpw(password_bytes, hashed_password_bytes)
+
 
 def decode_token(token: str):
     try:
@@ -79,11 +84,17 @@ def decode_token(token: str):
     except JWTError:
         return None
 
+
 def get_user_id_by_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     token = credentials.credentials
 
     try:
         payload = decode_token(token)
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+            )
 
         user_id = payload.get("sub")
 

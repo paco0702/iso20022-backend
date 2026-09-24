@@ -119,7 +119,38 @@ def create_table(session):
             code text,  
             invoice_number text,
             created_by UUID,
-            updated_by UUID
+            updated_by UUID,
+            status text
+        )
+        """)
+
+    session.execute(
+        """
+        CREATE TABLE IF NOT EXISTS payment_by_status (
+            id uuid,
+            amount decimal,
+            currency text,
+            execute_date timestamp,
+            end_to_end_id text,
+            remittance text,
+            charge_bearer text,
+            debtor_name text,
+            debtor_bic  text,
+            debtor_iban text,
+            creditor_name text,
+            creditor_bic  text,
+            creditor_iban text,
+            created_at timestamp,
+            updated_at timestamp,
+            message_id text,
+            initial_party text,
+            transaction_no int,
+            code text,  
+            invoice_number text,
+            created_by UUID,
+            updated_by UUID,
+            status text,
+            PRIMARY KEY ((status, created_by), id)
         )
         """
     )
