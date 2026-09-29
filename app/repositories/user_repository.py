@@ -134,7 +134,8 @@ def get_user_by_id(user_id: UUID) -> Optional[dict[str, Any]]:
         """
         SELECT email,
                id,
-               full_name,
+               full_name_en,
+               full_name_ch,
                hashed_password,
                is_active,
                is_verified,

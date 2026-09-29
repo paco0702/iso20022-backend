@@ -9,6 +9,7 @@ from fastapi import Query, HTTPException
 
 from app.data.payment_constant import PaymentStatus
 from app.db.cassandra import get_cassandra_session
+from app.repositories.user_repository import get_user_by_id
 from app.schemas.common import Pagination
 from app.schemas.payment import GetPaymentResponse, PaymentItem
 
@@ -54,7 +55,7 @@ def insert_payment_by_id(payment) -> bool:
          payment["created_by"], payment["updated_by"], payment["status"]]
     )
     row = result.one()
-    print("insert by payment status: ",row)
+    print("insert by payment status: ", row)
     return bool(row["[applied]"])
 
 
@@ -181,32 +182,36 @@ def get_payment_by_id(payment_status: str,
     for row in result.current_rows:
         print(row)
 
-    items = [
-        PaymentItem(
-            id=str(row["id"]),
-            status=row.get("status"),
-            created_at=row["created_at"].replace(tzinfo=timezone.utc)
-            .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
-            amount=row["amount"],
-            currency=row["currency"],
-            execute_date=row["execute_date"].replace(tzinfo=timezone.utc)
-            .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
-            end_to_end_id=row["end_to_end_id"],
-            remittance=row["remittance"],
-            charge_bearer=row["charge_bearer"],
-            debtor_name=row["debtor_name"],
-            debtor_bic=row["debtor_bic"],
-            debtor_iban=row["debtor_iban"],
-            creditor_name=row["creditor_name"],
-            creditor_bic=row["creditor_bic"],
-            creditor_iban=row["creditor_iban"],
-            created_by=str(row["created_by"]),
-            updated_by=str(row["updated_by"]),
-            transaction_no=row["transaction_no"],
+    items = []
+
+    for row in result.current_rows:
+        created_by_user = get_user_by_id(row["created_by"])
+        updated_by_user = get_user_by_id(row["updated_by"])
+        items.append(
+                PaymentItem(
+                id=str(row["id"]),
+                status=row.get("status"),
+                created_at=row["created_at"].replace(tzinfo=timezone.utc)
+                .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                amount=row["amount"],
+                currency=row["currency"],
+                execute_date=row["execute_date"].replace(tzinfo=timezone.utc)
+                .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                end_to_end_id=row["end_to_end_id"],
+                remittance=row["remittance"],
+                charge_bearer=row["charge_bearer"],
+                debtor_name=row["debtor_name"],
+                debtor_bic=row["debtor_bic"],
+                debtor_iban=row["debtor_iban"],
+                creditor_name=row["creditor_name"],
+                creditor_bic=row["creditor_bic"],
+                creditor_iban=row["creditor_iban"],
+                created_by=created_by_user["full_name_en"],
+                updated_by=updated_by_user["full_name_en"],
+                transaction_no=row["transaction_no"],
+            )
         )
 
-        for row in result.current_rows
-    ]
 
     next_page_state = None
 

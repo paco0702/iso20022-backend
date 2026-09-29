@@ -32,9 +32,10 @@ def createPayment(request: CreatePaymentRequest, user_id: str = Depends(get_user
 
 @router.get("/retrieve-payment")
 def retrievePayment(user_id: str = Depends(get_user_id_by_token),
+                    status: str = PaymentStatus.PENDING.value,
                     page_state: Optional[str] = Query(None),
                     size: int = Query(10, ge=0)):
-    return retrieve_payment(UUID(user_id), page_state, size)
+    return retrieve_payment(UUID(user_id), page_state, status, size)
 
 
 @router.patch("/approve-payment/{payment_id}")

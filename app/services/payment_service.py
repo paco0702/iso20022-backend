@@ -69,8 +69,9 @@ def create_payment(request: CreatePaymentRequest, user_id):
 
 def retrieve_payment(user_id: UUID,
                      page_state: Optional[str],
+                     status: str,
                      size: int, ) -> GetPaymentResponse:
-    result = payment_repository.get_payment_by_id(PaymentStatus.PENDING.value, page_state, user_id, size)
+    result = payment_repository.get_payment_by_id(status, page_state, user_id, size)
 
     return result
 
