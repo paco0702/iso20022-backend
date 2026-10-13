@@ -277,7 +277,7 @@ def get_payment_by_status_and_debtor_iban(payment_status: str,
         decoded_page_state = None
         if page_state:
             try:
-                decoded_page_state = base64.b64decode(page_state)
+                decoded_page_state = base64.urlsafe_b64decode(page_state)
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid page_state")
 
@@ -322,7 +322,7 @@ def get_payment_by_status_and_debtor_iban(payment_status: str,
         next_page_state = None
 
         if result.has_more_pages:
-            next_page_state = base64.b64encode(
+            next_page_state = base64.urlsafe_b64encode(
                 result.paging_state
             ).decode("utf-8")
 
