@@ -254,6 +254,89 @@ def get_payment_by_status(payment_status: str, payment_id: UUID, user_id: UUID):
     print(row)
     return row
 
+def get_payment_by_status_and_debtor_iban(payment_status: str,
+                      debtor_id: str,
+                      page_state: Optional[str],
+                      user_id: UUID,
+                      size: int,
+                      ) -> GetPaymentResponse:
+        session = get_cassandra_session()
+
+        query = """ 
+            SELECT * 
+            FROM payment_by_status
+            where status = %s
+            and created_by = %s
+            and debtor_iban = %s
+            ALLOW FILTERING;
+        """
+        statements = SimpleStatement(
+            query,
+            fetch_size=size
+        )
+        decoded_page_state = None
+        if page_state:
+            try:
+                decoded_page_state = base64.b64decode(page_state)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid page_state")
+
+        result = session.execute(
+            statements,
+            (payment_status, user_id, debtor_id),
+            paging_state=decoded_page_state
+        )
+        for row in result.current_rows:
+            print(row)
+
+        items = []
+
+        for row in result.current_rows:
+            created_by_user = get_user_by_id(row["created_by"])
+            updated_by_user = get_user_by_id(row["updated_by"])
+            items.append(
+                PaymentItem(
+                    id=str(row["id"]),
+                    status=row.get("status"),
+                    created_at=row["created_at"].replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                    amount=row["amount"],
+                    currency=row["currency"],
+                    execute_date=row["execute_date"].replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                    end_to_end_id=row["end_to_end_id"],
+                    remittance=row["remittance"],
+                    charge_bearer=row["charge_bearer"],
+                    debtor_name=row["debtor_name"],
+                    debtor_bic=row["debtor_bic"],
+                    debtor_iban=row["debtor_iban"],
+                    creditor_name=row["creditor_name"],
+                    creditor_bic=row["creditor_bic"],
+                    creditor_iban=row["creditor_iban"],
+                    created_by=created_by_user["full_name_en"],
+                    updated_by=updated_by_user["full_name_en"],
+                    transaction_no=row["transaction_no"],
+                )
+            )
+
+        next_page_state = None
+
+        if result.has_more_pages:
+            next_page_state = base64.b64encode(
+                result.paging_state
+            ).decode("utf-8")
+
+        return GetPaymentResponse(
+            items=items,
+            pagination=Pagination(
+                page_size=size,
+                count=len(items),
+                next_page_state=next_page_state,
+                has_next=result.has_more_pages,
+
+            )
+        )
+
 
 def exist_payment_by_id(payment_status: str, payment_id: UUID, user_id: UUID):
     session = get_cassandra_session()

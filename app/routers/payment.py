@@ -7,7 +7,8 @@ from starlette.responses import JSONResponse
 
 from app.core.security import get_user_id_by_token
 from app.data.payment_constant import PaymentStatus
-from app.services.payment_service import create_payment, retrieve_payment, update_payment
+from app.services.payment_service import create_payment, retrieve_payment, update_payment, \
+    retrieve_payment_by_debtor_iban, retrieve_payment_by_debtor_iban
 
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse
 
@@ -38,6 +39,15 @@ def retrievePayment(user_id: str = Depends(get_user_id_by_token),
     return retrieve_payment(UUID(user_id), page_state, status, size)
 
 
+@router.get("/retrieve-payment/{debtor_id}")
+def retrievePayment(user_id: str = Depends(get_user_id_by_token),
+                    status: str = PaymentStatus.PENDING.value,
+                    debtor_id: str = Path(),
+                    page_state: Optional[str] = Query(None),
+                    size: int = Query(10, ge=0)):
+    return retrieve_payment_by_debtor_iban(UUID(user_id), debtor_id, page_state, status, size)
+
+
 @router.patch("/approve-payment/{payment_id}")
 def approvePayment(user_id: str = Depends(get_user_id_by_token),
                    payment_id: str = Path(),):
@@ -50,7 +60,7 @@ def approvePayment(user_id: str = Depends(get_user_id_by_token),
         status_code=status.HTTP_200_OK)
     return response
 
-@router.patch("/reject-payment/{payment_id}")
+@router.delete("/reject-payment/{payment_id}")
 def rejectPayment(user_id: str = Depends(get_user_id_by_token),
                    payment_id: str = Path(),):
     print("Reject payment request: ", user_id)

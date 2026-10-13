@@ -69,14 +69,14 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 def decode_token(token: str):
     try:
+        print("decode token: ", token)
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
         )
-
         subject = payload.get("sub")
-        print("subject: ", payload)
+
         if subject is None:
             return None
 
@@ -87,10 +87,10 @@ def decode_token(token: str):
 
 def get_user_id_by_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     token = credentials.credentials
-
     try:
         payload = decode_token(token)
         if payload is None:
+            print("payload is none")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired token",
@@ -99,11 +99,11 @@ def get_user_id_by_token(credentials: HTTPAuthorizationCredentials = Depends(sec
         user_id = payload.get("sub")
 
         if user_id is None:
+            print("user_id is none")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token missing user id"
             )
-
         return user_id
 
     except JWTError:

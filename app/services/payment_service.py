@@ -5,7 +5,7 @@ from fastapi import HTTPException, Query
 
 from app.repositories import payment_repository
 from app.util import payment_util, datetime_util
-from app.repositories.payment_repository import insert_payment_by_id, insert_payment_by_status
+from app.repositories.payment_repository import insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse
 from app.data.payment_constant import (PaymentStatus)
 
@@ -72,6 +72,15 @@ def retrieve_payment(user_id: UUID,
                      status: str,
                      size: int, ) -> GetPaymentResponse:
     result = payment_repository.get_payment_by_id(status, page_state, user_id, size)
+
+    return result
+
+def retrieve_payment_by_debtor_iban(user_id: UUID,
+                     debtor_id: str,
+                     page_state: Optional[str],
+                     status: str,
+                     size: int, ) -> GetPaymentResponse:
+    result = payment_repository.get_payment_by_status_and_debtor_iban(status, debtor_id,  page_state, user_id, size)
 
     return result
 
