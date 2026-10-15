@@ -1,14 +1,16 @@
 from typing import Optional, Literal
 from uuid import UUID
+from zipfile import error
 
+import httpx
 from fastapi import HTTPException, Query
 
 from app.repositories import payment_repository
 from app.util import payment_util, datetime_util
-from app.repositories.payment_repository import insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban
-from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse
+from app.repositories.payment_repository import insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists
+from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse, CreateBatchRequest
 from app.data.payment_constant import (PaymentStatus)
-
+BANK_SERVICE_URL = "http://localhost:8001/payment/receive-xml"
 
 def create_payment(request: CreatePaymentRequest, user_id):
     if request.id is None or request.id == '':
@@ -60,6 +62,7 @@ def create_payment(request: CreatePaymentRequest, user_id):
         raise HTTPException(status_code=400, detail="Payment was not successful")
 
     inserted_by_status = insert_payment_by_status(payment)
+
     response = {
         "message": "success",
         "error": None,
@@ -135,3 +138,24 @@ def update_payment(user_id: UUID, payment_id: UUID, payment_status: str):
         raise HTTPException(status_code=400, detail="Payment was not successful")
 
 
+
+async def create_batch (user_id: UUID, request: CreateBatchRequest):
+    converted_payment_ids = [UUID(payment_id) for payment_id in request.payment_ids]
+    exists_all = all_payment_by_ids_exists(converted_payment_ids)
+
+    if not exists_all:
+        raise HTTPException(status_code=400, detail="Not all payment ids exist")
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                BANK_SERVICE_URL,
+                content=request.model_dump_json(),
+                headers={"Content-Type": "application/json"}
+            )
+            response.raise_for_status()
+            return response.json()
+        except error:
+            raise HTTPException(status_code=503, detail="Bank service is unavailable")
+
+    return "Failed to send to payment service"

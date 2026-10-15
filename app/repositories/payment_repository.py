@@ -4,6 +4,7 @@ from typing import Optional, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from cassandra.encoder import ValueSequence
 from cassandra.query import SimpleStatement
 from fastapi import Query, HTTPException
 
@@ -361,6 +362,33 @@ def exist_payment_by_id(payment_status: str, payment_id: UUID, user_id: UUID):
         return False
 
     return row["count"] > 0
+
+def all_payment_by_ids_exists ( payment_ids: list[UUID]):
+    session = get_cassandra_session()
+    placeholders = ', '.join(['%s'] * len(payment_ids))
+
+    query = f""" 
+    SELECT COUNT(*)
+    FROM payment_by_id
+    WHERE id IN ({placeholders})
+    ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+       payment_ids
+    )
+
+    row = result.one()
+    if row is None:
+        return False
+
+    print(row)
+    print(len(payment_ids))
+    return row["count"] == len(payment_ids)
+
 
 
 def update_payment_status_by_id(user_id: UUID, new_status: str, payment_id: UUID):

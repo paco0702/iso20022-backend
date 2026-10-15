@@ -4,7 +4,6 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.schemas.common import (Pagination)
 
-
 class CreatePaymentRequest(BaseModel):
     id: str
     amount: float
@@ -56,3 +55,11 @@ class PaymentItem(BaseModel):
 class GetPaymentResponse(BaseModel):
     items: List[PaymentItem]
     pagination: Pagination
+
+class CreateBatchRequest(BaseModel):
+    batch_file_name: str
+    xml_content: str
+    created_at: datetime
+    payment_ids: List[str]
+
+

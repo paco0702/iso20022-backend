@@ -155,6 +155,23 @@ def create_table(session):
         """
     )
 
+    session.execute(
+        """
+        CREATE TABLE IF NOT EXISTS payment_batch_message_by_id (
+            id uuid,
+            batch_type text,
+            batch_id text,
+            batch_message text,
+            batch_name text,
+            created_at timestamp,
+            updated_at timestamp,
+            created_by UUID,
+            updated_by UUID,
+            PRIMARY KEY (id, batch_id)
+        )
+        """
+    )
+
 
 def close_cassandra_connection():
     global cluster
