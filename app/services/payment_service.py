@@ -10,6 +10,8 @@ from app.util import payment_util, datetime_util
 from app.repositories.payment_repository import insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse, CreateBatchRequest
 from app.data.payment_constant import (PaymentStatus)
+import re
+
 BANK_SERVICE_URL = "http://localhost:8001/payment/receive-xml"
 
 def create_payment(request: CreatePaymentRequest, user_id):
@@ -28,8 +30,8 @@ def create_payment(request: CreatePaymentRequest, user_id):
     if (not payment_util.is_valid_iban(request.creditor_iban)) or (not payment_util.is_valid_iban(request.debtor_iban)):
         raise HTTPException(status_code=400, detail="Creditor IBAN must be valid")
 
-    created_at = datetime_util.to_iso_8601_format(request.creation_date)
-    execute_date = datetime_util.to_iso_8601_format(request.execute_date)
+    # created_at = datetime_util.to_iso_8601_format(request.creation_date)
+    # execute_date = datetime_util.to_iso_8601_format(request.execute_date)
     request_id = UUID(request.id)
     payment = {
         "created_by": UUID(user_id),
@@ -43,14 +45,14 @@ def create_payment(request: CreatePaymentRequest, user_id):
         "debtor_name": request.debtor_name,
         "debtor_bic": request.debtor_bic,
         "debtor_iban": request.debtor_iban,
-        "execute_date": execute_date,
+        "execute_date": request.execute_date,
         "transaction_no": request.transaction_no,
         "message_id": request.message_id,
         "initial_party": request.initial_party,
         "code": request.code,
         "invoice_number": request.invoice_number,
-        "created_at": created_at,
-        "updated_at": created_at,
+        "created_at": request.creation_date,
+        "updated_at": request.creation_date,
         "charge_bearer": request.charge_bearer,
         "remittance": request.remittance,
         "end_to_end_id": request.end_to_end_id,
@@ -142,7 +144,10 @@ def update_payment(user_id: UUID, payment_id: UUID, payment_status: str):
 async def create_batch (user_id: UUID, request: CreateBatchRequest):
     converted_payment_ids = [UUID(payment_id) for payment_id in request.payment_ids]
     exists_all = all_payment_by_ids_exists(converted_payment_ids)
+    cleaned_xml_content = re.sub(r'>\s+<', '><', request.xml_content.strip().replace('\n', '').replace('\r', ''))
+    request.xml_content = cleaned_xml_content
 
+    print("Xml content: ", request.xml_content)
     if not exists_all:
         raise HTTPException(status_code=400, detail="Not all payment ids exist")
 
