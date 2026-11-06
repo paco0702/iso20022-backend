@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse
 from app.core.security import get_user_id_by_token
 from app.data.payment_constant import PaymentStatus
 from app.services.payment_service import create_payment, retrieve_payment, update_payment, \
-    retrieve_payment_by_debtor_iban, retrieve_payment_by_debtor_iban, create_batch
+    retrieve_payment_by_debtor_iban, retrieve_payment_by_debtor_iban, create_batch, retrieve_payment_batch
 
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, CreateBatchRequest
 
@@ -78,5 +78,13 @@ async def createBatch(request: CreateBatchRequest,
             "response": response
         },
         status_code=status.HTTP_200_OK)
+
+
+@router.get("/retrieve-batch")
+def retrieveBatch(user_id: str = Depends(get_user_id_by_token),
+                  page_state: Optional[str] = Query(None),
+                  size: int = Query(10, ge=0)):
+    response = retrieve_payment_batch(UUID(user_id), page_state, size)
+    return response
 
 

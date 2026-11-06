@@ -12,7 +12,7 @@ from app.data.payment_constant import PaymentStatus
 from app.db.cassandra import get_cassandra_session
 from app.repositories.user_repository import get_user_by_id
 from app.schemas.common import Pagination
-from app.schemas.payment import GetPaymentResponse, PaymentItem
+from app.schemas.payment import GetPaymentResponse, PaymentItem, PaymentBatchItem, GetPaymentBatchResponse
 
 
 def insert_payment_by_id(payment) -> bool:
@@ -150,9 +150,10 @@ def insert_payment_by_user_id(payment) -> bool:
     return bool(row["[applied]"])
 
 
-def get_payment_by_id(payment_status: str,
+def get_payment_by_user_id_and_status(
+        user_id: UUID,
+        payment_status: str,
                       page_state: Optional[str],
-                      user_id: UUID,
                       size: int,
                       ) -> GetPaymentResponse:
     session = get_cassandra_session()
@@ -378,15 +379,13 @@ def all_payment_by_ids_exists ( payment_ids: list[UUID]):
     )
     result = session.execute(
         statements,
-       payment_ids
+        payment_ids
     )
 
     row = result.one()
     if row is None:
         return False
 
-    print(row)
-    print(len(payment_ids))
     return row["count"] == len(payment_ids)
 
 
@@ -477,3 +476,186 @@ def insert_payment_by_status(payment) -> bool:
 
     row = result.one()
     return bool(row["[applied]"])
+
+
+def insert_payment_batch_by_id(payment_batch):
+    session = get_cassandra_session()
+    result = session.execute(
+        """
+           INSERT INTO payment_batch_message_by_id (
+               id,
+               batch_type,
+               batch_id,
+               batch_message,
+               batch_name,
+               created_at,
+               updated_at,
+               created_by,
+               updated_by,
+               payment_ids)
+       VALUES ( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTs     
+       """,
+        [payment_batch["id"], payment_batch["batch_type"], payment_batch["batch_id"],
+         payment_batch["batch_message"], payment_batch["batch_name"],
+         payment_batch["created_at"], payment_batch["updated_at"],
+         payment_batch["created_by"], payment_batch["updated_by"],
+         payment_batch["payment_ids"]]
+    )
+
+    row = result.one()
+    return bool(row["[applied]"])
+
+
+def get_payment_batch_by_user_id(user_id: UUID,
+                      page_state: Optional[str],
+                      size: int,) -> GetPaymentBatchResponse:
+    session = get_cassandra_session()
+    query = """ 
+        SELECT * 
+        FROM payment_batch_message_by_id
+        where created_by = %s
+        ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query,
+        fetch_size=size
+    )
+    decoded_page_state = None
+    if page_state:
+        try:
+            decoded_page_state = base64.b64decode(page_state)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid page_state")
+
+    result = session.execute(
+        statements,
+        (user_id,),
+        paging_state=decoded_page_state
+    )
+    for row in result.current_rows:
+        print(row)
+
+    items = []
+
+    for row in result.current_rows:
+        created_by_user = get_user_by_id(row["created_by"])
+        updated_by_user = get_user_by_id(row["updated_by"])
+        total_amount = get_amount_by_id(row["payment_ids"])
+        items.append(
+                PaymentBatchItem(
+                id=str(row["id"]),
+                batch_type=row["batch_type"],
+                batch_id=str(row["batch_id"]),
+                xml_content=row["batch_message"],
+                batch_name=row["batch_name"],
+                payment_ids=row["payment_ids"],
+                total_amount=total_amount,
+                created_at=row["created_at"].replace(tzinfo=timezone.utc)
+                .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                updated_at=row["updated_at"].replace(tzinfo=timezone.utc)
+                .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                created_by=created_by_user["full_name_en"],
+                updated_by=updated_by_user["full_name_en"],
+            )
+        )
+
+    next_page_state = None
+
+    if result.has_more_pages:
+        next_page_state = base64.b64encode(
+            result.paging_state
+        ).decode("utf-8")
+
+    return GetPaymentBatchResponse(
+        items=items,
+        pagination=Pagination(
+            page_size=size,
+            count=len(items),
+            next_page_state=next_page_state,
+            has_next=result.has_more_pages,
+        )
+    )
+
+def count_payment_batch_total_amount ():
+    session = get_cassandra_session()
+
+    query = """ 
+    SELECT SUM(AMOUNT) as amount
+    FROM payment_batch_message_by_id
+    ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements
+    )
+
+    row = result.one()
+    total_amount = row["amount"] if row and row["amount"] is not None else 0
+
+    return total_amount
+
+
+def count_payment_batch ():
+    session = get_cassandra_session()
+
+    query = """ 
+    SELECT COUNT(*)
+    FROM payment_batch_message_by_id
+    ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements
+    )
+
+    row = result.one()
+    return row["count"]
+
+def count_payment_batch_by_type (type: str):
+    session = get_cassandra_session()
+
+    query = """ 
+    SELECT COUNT(*)
+    FROM payment_batch_message_by_id
+    WHERE batch_type = %s
+    ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+        type
+    )
+
+    row = result.one()
+    return row["count"]
+
+def get_amount_by_id(ids: list[UUID]):
+    session = get_cassandra_session()
+    placeholders = ', '.join(['%s'] * len(ids))
+
+    query = f""" 
+       SELECT SUM(AMOUNT) AS amount 
+       FROM payment_by_id
+       WHERE id IN ({placeholders})
+       ALLOW FILTERING;
+       """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+        ids
+    )
+    row = result.one()
+    total_amount = row["amount"] if row and row["amount"] is not None else 0
+
+    return total_amount
+
+
+

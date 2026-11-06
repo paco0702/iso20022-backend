@@ -167,6 +167,7 @@ def create_table(session):
             updated_at timestamp,
             created_by UUID,
             updated_by UUID,
+            payment_ids list<uuid>,
             PRIMARY KEY (id, batch_id)
         )
         """

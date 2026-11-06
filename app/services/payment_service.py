@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional, Literal
 from uuid import UUID
 from zipfile import error
@@ -7,7 +8,8 @@ from fastapi import HTTPException, Query
 
 from app.repositories import payment_repository
 from app.util import payment_util, datetime_util
-from app.repositories.payment_repository import insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists
+from app.repositories.payment_repository import (insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists,
+                                                 insert_payment_batch_by_id, count_payment_batch_by_type, count_payment_batch)
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse, CreateBatchRequest
 from app.data.payment_constant import (PaymentStatus)
 import re
@@ -33,6 +35,7 @@ def create_payment(request: CreatePaymentRequest, user_id):
     # created_at = datetime_util.to_iso_8601_format(request.creation_date)
     # execute_date = datetime_util.to_iso_8601_format(request.execute_date)
     request_id = UUID(request.id)
+    # convert_amount_to_hkd(amount, currency);
     payment = {
         "created_by": UUID(user_id),
         "updated_by": UUID(user_id),
@@ -76,7 +79,7 @@ def retrieve_payment(user_id: UUID,
                      page_state: Optional[str],
                      status: str,
                      size: int, ) -> GetPaymentResponse:
-    result = payment_repository.get_payment_by_id(status, page_state, user_id, size)
+    result = payment_repository.get_payment_by_user_id_and_status(user_id, status, page_state, size)
 
     return result
 
@@ -84,7 +87,7 @@ def retrieve_payment_by_debtor_iban(user_id: UUID,
                      debtor_id: str,
                      page_state: Optional[str],
                      status: str,
-                     size: int, ) -> GetPaymentResponse:
+                     size: int,) -> GetPaymentResponse:
     result = payment_repository.get_payment_by_status_and_debtor_iban(status, debtor_id,  page_state, user_id, size)
 
     return result
@@ -151,6 +154,7 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
     if not exists_all:
         raise HTTPException(status_code=400, detail="Not all payment ids exist")
 
+
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
@@ -159,8 +163,48 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 headers={"Content-Type": "application/json"}
             )
             response.raise_for_status()
+
+            payment_batch = {
+                "id": uuid.uuid4(),
+                "batch_id": request.batch_id,
+                "batch_message": request.xml_content,
+                "batch_name": request.batch_file_name,
+                "batch_type": "Created",
+                "created_at": request.created_at,
+                "created_by": user_id,
+                "updated_at": request.created_at,
+                "updated_by": user_id,
+                "payment_ids": converted_payment_ids,
+            }
+
+            insert_payment_batch_by_id(payment_batch)
             return response.json()
         except error:
-            raise HTTPException(status_code=503, detail="Bank service is unavailable")
+            payment_batch = {
+                "id": uuid.uuid4(),
+                "batch_id": request.batch_id,
+                "batch_message": request.xml_content,
+                "batch_name": request.batch_file_name,
+                "batch_type": "Failed",
+                "created_at": request.created_at,
+                "created_by": user_id,
+                "updated_at": request.created_at,
+                "updated_by": user_id,
+                "payment_ids": converted_payment_ids,
+            }
+            insert_payment_batch_by_id(payment_batch)
+            return response.json()
 
-    return "Failed to send to payment service"
+def retrieve_payment_batch (user_id: UUID,
+    page_state: Optional[str],
+    size: int):
+    result = payment_repository.get_payment_batch_by_user_id(user_id, page_state, size)
+    return result
+
+
+def retrieve_batch_overview (user_id: UUID, payment_batch_id: UUID):
+    pending_approval_batch = count_payment_batch_by_type("PendingApproval")
+    validation_failed_batch = count_payment_batch_by_type("ValidationFailed")
+    total_payment_batch = count_payment_batch()
+
+    return

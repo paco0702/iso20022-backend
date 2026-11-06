@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel
 from typing import Optional, List
@@ -52,14 +53,37 @@ class PaymentItem(BaseModel):
     transaction_no: int
 
 
+class PaymentBatchItem(BaseModel):
+    id: str
+    batch_type: str
+    batch_id: str
+    xml_content: str
+    batch_name: str
+    payment_ids: List[UUID]
+    total_amount: float
+    created_at: str
+    updated_at: str
+    updated_by: str
+    created_by: str
+
 class GetPaymentResponse(BaseModel):
     items: List[PaymentItem]
     pagination: Pagination
 
 class CreateBatchRequest(BaseModel):
+    batch_id: str
     batch_file_name: str
     xml_content: str
     created_at: datetime
     payment_ids: List[str]
 
 
+class GetPaymentBatchResponse(BaseModel):
+    items: List[PaymentBatchItem]
+    pagination: Pagination
+
+class GetPaymentBatchOverview(BaseModel):
+    total_count: int
+    total_pending_approval: int
+    total_validation_failed: int
+    total_amount: float
