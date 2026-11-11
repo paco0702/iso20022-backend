@@ -9,7 +9,7 @@ from fastapi import HTTPException, Query
 from app.repositories import payment_repository
 from app.util import payment_util, datetime_util
 from app.repositories.payment_repository import (insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists,
-                                                 insert_payment_batch_by_id, count_payment_batch_by_type, count_payment_batch)
+                                                 insert_payment_batch_by_id, count_payment_batch_by_type, count_payment_batch, count_payment_batch_total_amount, get_total_amount_by_payment_ids)
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse, CreateBatchRequest
 from app.data.payment_constant import (PaymentStatus)
 import re
@@ -35,12 +35,13 @@ def create_payment(request: CreatePaymentRequest, user_id):
     # created_at = datetime_util.to_iso_8601_format(request.creation_date)
     # execute_date = datetime_util.to_iso_8601_format(request.execute_date)
     request_id = UUID(request.id)
-    # convert_amount_to_hkd(amount, currency);
+    converted_amount = payment_util.convert_amount_to_hkd(request.amount, request.currency)
+
     payment = {
         "created_by": UUID(user_id),
         "updated_by": UUID(user_id),
         "id": request_id,
-        "amount": request.amount,
+        "amount": converted_amount,
         "currency": request.currency,
         "creditor_name": request.creditor_name,
         "creditor_bic": request.creditor_bic,
@@ -147,6 +148,8 @@ def update_payment(user_id: UUID, payment_id: UUID, payment_status: str):
 async def create_batch (user_id: UUID, request: CreateBatchRequest):
     converted_payment_ids = [UUID(payment_id) for payment_id in request.payment_ids]
     exists_all = all_payment_by_ids_exists(converted_payment_ids)
+    total_amount = get_total_amount_by_payment_ids(converted_payment_ids)
+
     cleaned_xml_content = re.sub(r'>\s+<', '><', request.xml_content.strip().replace('\n', '').replace('\r', ''))
     request.xml_content = cleaned_xml_content
 
@@ -169,12 +172,13 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 "batch_id": request.batch_id,
                 "batch_message": request.xml_content,
                 "batch_name": request.batch_file_name,
-                "batch_type": "Created",
+                "batch_type": "PendingApproval",
                 "created_at": request.created_at,
                 "created_by": user_id,
                 "updated_at": request.created_at,
                 "updated_by": user_id,
                 "payment_ids": converted_payment_ids,
+                "total_amount": total_amount,
             }
 
             insert_payment_batch_by_id(payment_batch)
@@ -202,9 +206,17 @@ def retrieve_payment_batch (user_id: UUID,
     return result
 
 
-def retrieve_batch_overview (user_id: UUID, payment_batch_id: UUID):
+def retrieve_batch_overview (user_id: UUID):
+    #TODO: check user id for future usage
     pending_approval_batch = count_payment_batch_by_type("PendingApproval")
     validation_failed_batch = count_payment_batch_by_type("ValidationFailed")
     total_payment_batch = count_payment_batch()
+    total_payment_amount = count_payment_batch_total_amount()
 
-    return
+
+    return {
+        "pending_approval_batch": pending_approval_batch,
+        "validation_failed_batch": validation_failed_batch,
+        "total_payment_batch": total_payment_batch,
+        "total_payment_amount": total_payment_amount
+    }

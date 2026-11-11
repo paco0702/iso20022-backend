@@ -19,6 +19,14 @@ IBAN_LENGTHS = {
     "GB": 22, "VG": 24,
 }
 
+EXCHANGE_RATES_TO_HKD = {
+    "USD": 7.80,
+    "EUR": 8.45,
+    "GBP": 9.90,
+    "JPY": 0.052,
+    "HKD": 1.00 # Base currency
+}
+
 def is_valid_iban(iban):
     iban = re.sub(r"\s+", "", iban or "").upper()
 
@@ -63,3 +71,14 @@ def is_valid_iban(iban):
         print("Remainder is not 0")
         return False
     return True
+
+
+def convert_amount_to_hkd(amount: float, currency: str) -> float:
+    currency = currency.upper()
+
+    rate = EXCHANGE_RATES_TO_HKD.get(currency)
+    if rate is None:
+        print("Currency not in the list")
+        return amount
+
+    return round(amount * rate)

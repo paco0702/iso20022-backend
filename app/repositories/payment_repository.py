@@ -389,6 +389,31 @@ def all_payment_by_ids_exists ( payment_ids: list[UUID]):
     return row["count"] == len(payment_ids)
 
 
+def get_total_amount_by_payment_ids( payment_ids: list[UUID]):
+    session = get_cassandra_session()
+    placeholders = ', '.join(['%s'] * len(payment_ids))
+
+    query = f""" 
+    SELECT SUM(amount) AS total_amount
+    FROM payment_by_id
+    WHERE id IN ({placeholders})
+    ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+        payment_ids
+    )
+
+    row = result.one()
+    if row is None:
+        return False
+
+    return row["total_amount"]
+
+
 
 def update_payment_status_by_id(user_id: UUID, new_status: str, payment_id: UUID):
     session = get_cassandra_session()
@@ -492,14 +517,15 @@ def insert_payment_batch_by_id(payment_batch):
                updated_at,
                created_by,
                updated_by,
-               payment_ids)
-       VALUES ( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTs     
+               payment_ids,
+               total_amount)
+       VALUES ( %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTs     
        """,
         [payment_batch["id"], payment_batch["batch_type"], payment_batch["batch_id"],
          payment_batch["batch_message"], payment_batch["batch_name"],
          payment_batch["created_at"], payment_batch["updated_at"],
          payment_batch["created_by"], payment_batch["updated_by"],
-         payment_batch["payment_ids"]]
+         payment_batch["payment_ids"], payment_batch["total_amount"]]
     )
 
     row = result.one()
@@ -580,7 +606,7 @@ def count_payment_batch_total_amount ():
     session = get_cassandra_session()
 
     query = """ 
-    SELECT SUM(AMOUNT) as amount
+    SELECT SUM(TOTAL_AMOUNT) as amount
     FROM payment_batch_message_by_id
     ALLOW FILTERING;
     """
@@ -615,7 +641,25 @@ def count_payment_batch ():
     row = result.one()
     return row["count"]
 
-def count_payment_batch_by_type (type: str):
+def count_total_amount_batch ():
+    session = get_cassandra_session()
+    query = """ 
+    SELECT SUM(AMOUNT) as amount
+    FROM payment_batch_message_by_id
+    ALLOW FILTERING;
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements
+    )
+
+    row = result.one()
+    return row["amount"]
+
+
+def count_payment_batch_by_type (batch_type: str):
     session = get_cassandra_session()
 
     query = """ 
@@ -629,7 +673,7 @@ def count_payment_batch_by_type (type: str):
     )
     result = session.execute(
         statements,
-        type
+        (batch_type, )
     )
 
     row = result.one()

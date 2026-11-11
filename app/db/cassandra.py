@@ -168,6 +168,7 @@ def create_table(session):
             created_by UUID,
             updated_by UUID,
             payment_ids list<uuid>,
+            total_amount decimal,
             PRIMARY KEY (id, batch_id)
         )
         """
