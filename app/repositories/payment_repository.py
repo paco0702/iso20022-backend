@@ -1,5 +1,5 @@
 import base64
-from datetime import timezone
+from datetime import timezone, datetime
 from typing import Optional, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -56,7 +56,6 @@ def insert_payment_by_id(payment) -> bool:
          payment["created_by"], payment["updated_by"], payment["status"]]
     )
     row = result.one()
-    print("insert by payment status: ", row)
     return bool(row["[applied]"])
 
 
@@ -234,7 +233,7 @@ def get_payment_by_user_id_and_status(
     )
 
 
-def get_payment_by_status(payment_status: str, payment_id: UUID, user_id: UUID):
+def get_payment_by_status_and_id(payment_status: str, payment_id: UUID, user_id: UUID):
     session = get_cassandra_session()
     query = """ 
                SELECT * 
@@ -415,13 +414,15 @@ def get_total_amount_by_payment_ids( payment_ids: list[UUID]):
 
 
 
-def update_payment_status_by_id(user_id: UUID, new_status: str, payment_id: UUID):
+def update_payment_id_by_id(user_id: UUID, new_status: str, payment_id: UUID, updated_at: datetime):
     session = get_cassandra_session()
 
     # 1. Update payment to PENDING status
     query = """ 
     UPDATE payment_by_id
-    SET status = %s
+    SET status = %s, 
+    updated_at = %s,
+    updated_by = %s
     WHERE id = %s
     IF EXISTS
     """
@@ -430,7 +431,7 @@ def update_payment_status_by_id(user_id: UUID, new_status: str, payment_id: UUID
     )
     result = session.execute(
         statements,
-        (new_status, payment_id),
+        (new_status, updated_at, user_id, payment_id),
     )
 
     row = result.one()
@@ -460,7 +461,6 @@ def remove_payment_by_status(payment_status: str, user_id: UUID, payment_id: UUI
 
 def insert_payment_by_status(payment) -> bool:
     session = get_cassandra_session()
-
     result = session.execute(
         """
            INSERT INTO payment_by_status (
@@ -532,6 +532,7 @@ def insert_payment_batch_by_id(payment_batch):
     return bool(row["[applied]"])
 
 
+
 def get_payment_batch_by_user_id(user_id: UUID,
                       page_state: Optional[str],
                       size: int,) -> GetPaymentBatchResponse:
@@ -601,6 +602,49 @@ def get_payment_batch_by_user_id(user_id: UUID,
             has_next=result.has_more_pages,
         )
     )
+
+def update_status_payment_by_id_by_ids(user_id: UUID, new_status: str, payment_ids: list[UUID]):
+    session = get_cassandra_session()
+
+    placeholders = ', '.join(['%s'] * len(payment_ids))
+    # 1. Update payment to PENDING status
+    query = f""" 
+    UPDATE payment_by_id
+    SET status = %s
+    WHERE id IN ({placeholders})
+    IF EXISTS
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+        (new_status, payment_ids),
+    )
+    row = result.one()
+    return bool(row["[applied]"])
+
+def update_status_payment_by_status_by_ids(user_id: UUID, new_status: str, payment_ids: list[UUID]):
+    session = get_cassandra_session()
+
+    placeholders = ', '.join(['%s'] * len(payment_ids))
+    # 1. Update payment to PENDING status
+    query = f""" 
+    UPDATE payment_by_status
+    SET status = %s
+    WHERE id IN ({placeholders})
+    IF EXISTS
+    """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+        (new_status, payment_ids),
+    )
+    row = result.one()
+    return bool(row["[applied]"])
+
 
 def count_payment_batch_total_amount ():
     session = get_cassandra_session()

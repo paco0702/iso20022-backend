@@ -8,3 +8,6 @@ def to_iso_8601_format(date: str) -> datetime:
     )
 
     return dt_hk
+
+def updated_datetime() -> datetime:
+    return datetime.now(ZoneInfo("Asia/Hong_Kong"))

@@ -7,9 +7,10 @@ import httpx
 from fastapi import HTTPException, Query
 
 from app.repositories import payment_repository
-from app.util import payment_util, datetime_util
+from app.util import payment_util, datetime_util, xml_util
 from app.repositories.payment_repository import (insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists,
-                                                 insert_payment_batch_by_id, count_payment_batch_by_type, count_payment_batch, count_payment_batch_total_amount, get_total_amount_by_payment_ids)
+                                                 insert_payment_batch_by_id, count_payment_batch_by_type, count_payment_batch, count_payment_batch_total_amount, get_total_amount_by_payment_ids,
+                                                 update_status_payment_by_id_by_ids, update_status_payment_by_status_by_ids)
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse, CreateBatchRequest
 from app.data.payment_constant import (PaymentStatus)
 import re
@@ -96,17 +97,17 @@ def retrieve_payment_by_debtor_iban(user_id: UUID,
 
 def update_payment(user_id: UUID, payment_id: UUID, payment_status: str):
     payment_exist = payment_repository.exist_payment_by_id(PaymentStatus.PENDING.value, payment_id, user_id)
-
+    updated_at = datetime_util.updated_datetime()
     if not payment_exist:
         print("Payment does not exist")
         raise HTTPException(status_code=400, detail="Payment was not successful")
 
-    pending_payment = payment_repository.get_payment_by_status(PaymentStatus.PENDING.value, payment_id, user_id)
+    pending_payment = payment_repository.get_payment_by_status_and_id(PaymentStatus.PENDING.value, payment_id, user_id)
     if not pending_payment:
         print("Pending Payment does not exist")
         raise HTTPException(status_code=400, detail="Payment was not successful")
 
-    approved_by_id = payment_repository.update_payment_status_by_id(user_id, payment_status, payment_id)
+    approved_by_id = payment_repository.update_payment_id_by_id(user_id, payment_status, payment_id, updated_at)
     if not approved_by_id:
         print("Approved Payment does not exist")
         raise HTTPException(status_code=400, detail="Payment was not successful")
@@ -150,13 +151,11 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
     exists_all = all_payment_by_ids_exists(converted_payment_ids)
     total_amount = get_total_amount_by_payment_ids(converted_payment_ids)
 
-    cleaned_xml_content = re.sub(r'>\s+<', '><', request.xml_content.strip().replace('\n', '').replace('\r', ''))
+    cleaned_xml_content = xml_util.clean_up_xml_content(request.xml_content)
     request.xml_content = cleaned_xml_content
 
-    print("Xml content: ", request.xml_content)
     if not exists_all:
         raise HTTPException(status_code=400, detail="Not all payment ids exist")
-
 
     async with httpx.AsyncClient() as client:
         try:
@@ -166,13 +165,37 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 headers={"Content-Type": "application/json"}
             )
             response.raise_for_status()
+            confirmed_xml_content = xml_util.clean_up_xml_content(response.json().get("return_xml_message"))
+            if response.json().get("return_xml_message") is None or response.json().get("payment_results") is None:
+                raise HTTPException(status_code=400, detail="Payment was not successful")
+
+            batch_status = "created"
+            # retrieve bank status
+            all_accepted = all(
+                payment["payment_status"] == "accepted"
+                for payment in response.json().get("payment_results")
+            )
+
+            all_rejected = all(
+                payment["payment_status"] == "rejected"
+                for payment in response.json().get("payment_results")
+            )
+
+            if all_accepted:
+                batch_status = "accepted"
+
+            if all_rejected:
+                batch_status = "rejected"
+
+            if not all_accepted and not all_rejected:
+                batch_status = "partial_accepted"
 
             payment_batch = {
                 "id": uuid.uuid4(),
                 "batch_id": request.batch_id,
-                "batch_message": request.xml_content,
+                "batch_message": confirmed_xml_content,
                 "batch_name": request.batch_file_name,
-                "batch_type": "PendingApproval",
+                "batch_type": batch_status,
                 "created_at": request.created_at,
                 "created_by": user_id,
                 "updated_at": request.created_at,
@@ -180,8 +203,16 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 "payment_ids": converted_payment_ids,
                 "total_amount": total_amount,
             }
-
             insert_payment_batch_by_id(payment_batch)
+            updated_at =  datetime_util.updated_datetime()
+
+            for payment_result in response.json().get("payment_results"):
+                payment_id = uuid.UUID(payment_result["payment_id"])
+                payment = payment_repository.get_payment_by_status_and_id("approved", payment_id, user_id)
+                payment_repository.remove_payment_by_status("approved", user_id, payment_id)
+                payment["status"] = payment_result.get("payment_status")
+                payment_repository.insert_payment_by_status(payment)
+                payment_repository.update_payment_id_by_id(user_id, payment_result.get("status"), payment_id, updated_at)
             return response.json()
         except error:
             payment_batch = {
@@ -189,7 +220,7 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 "batch_id": request.batch_id,
                 "batch_message": request.xml_content,
                 "batch_name": request.batch_file_name,
-                "batch_type": "Failed",
+                "batch_type": "failed",
                 "created_at": request.created_at,
                 "created_by": user_id,
                 "updated_at": request.created_at,
@@ -197,6 +228,8 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 "payment_ids": converted_payment_ids,
             }
             insert_payment_batch_by_id(payment_batch)
+            update_status_payment_by_status_by_ids(user_id, PaymentStatus.REJECTED.value, converted_payment_ids)
+            update_status_payment_by_id_by_ids(user_id, PaymentStatus.REJECTED.value, converted_payment_ids)
             return response.json()
 
 def retrieve_payment_batch (user_id: UUID,
@@ -208,8 +241,8 @@ def retrieve_payment_batch (user_id: UUID,
 
 def retrieve_batch_overview (user_id: UUID):
     #TODO: check user id for future usage
-    pending_approval_batch = count_payment_batch_by_type("PendingApproval")
-    validation_failed_batch = count_payment_batch_by_type("ValidationFailed")
+    pending_approval_batch = count_payment_batch_by_type("accepted")
+    validation_failed_batch = count_payment_batch_by_type("failed")
     total_payment_batch = count_payment_batch()
     total_payment_amount = count_payment_batch_total_amount()
 
