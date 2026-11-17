@@ -5,12 +5,13 @@ from zipfile import error
 
 import httpx
 from fastapi import HTTPException, Query
+from starlette import status
 
 from app.repositories import payment_repository
 from app.util import payment_util, datetime_util, xml_util
 from app.repositories.payment_repository import (insert_payment_by_id, insert_payment_by_status, get_payment_by_status_and_debtor_iban, all_payment_by_ids_exists,
                                                  insert_payment_batch_by_id, count_payment_batch_by_type, count_payment_batch, count_payment_batch_total_amount, get_total_amount_by_payment_ids,
-                                                 update_status_payment_by_id_by_ids, update_status_payment_by_status_by_ids)
+                                                 update_status_payment_by_id_by_ids, update_status_payment_by_status_by_ids, get_batch_by_batch_id, get_payment_by_ids)
 from app.schemas.payment import CreatePaymentRequest, CreatePaymentResponse, GetPaymentResponse, CreateBatchRequest
 from app.data.payment_constant import (PaymentStatus)
 import re
@@ -212,7 +213,7 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
                 payment_repository.remove_payment_by_status("approved", user_id, payment_id)
                 payment["status"] = payment_result.get("payment_status")
                 payment_repository.insert_payment_by_status(payment)
-                payment_repository.update_payment_id_by_id(user_id, payment_result.get("status"), payment_id, updated_at)
+                payment_repository.update_payment_id_by_id(user_id, payment_result.get("payment_status"), payment_id, updated_at)
             return response.json()
         except error:
             payment_batch = {
@@ -252,4 +253,22 @@ def retrieve_batch_overview (user_id: UUID):
         "validation_failed_batch": validation_failed_batch,
         "total_payment_batch": total_payment_batch,
         "total_payment_amount": total_payment_amount
+    }
+
+def retrieve_batch_by_batch_id (user_id: UUID, batch_id: str):
+    batch = get_batch_by_batch_id(batch_id)
+
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,)
+
+    payment_ids = batch["payment_ids"]
+
+    if payment_ids is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,)
+
+    payments = get_payment_by_ids(payment_ids, user_id)
+
+    return {
+        "batch_details": batch,
+        "batch_payments": payments,
     }

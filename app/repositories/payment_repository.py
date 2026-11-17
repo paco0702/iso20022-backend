@@ -3,12 +3,8 @@ from datetime import timezone, datetime
 from typing import Optional, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
-
-from cassandra.encoder import ValueSequence
 from cassandra.query import SimpleStatement
 from fastapi import Query, HTTPException
-
-from app.data.payment_constant import PaymentStatus
 from app.db.cassandra import get_cassandra_session
 from app.repositories.user_repository import get_user_by_id
 from app.schemas.common import Pagination
@@ -416,8 +412,6 @@ def get_total_amount_by_payment_ids( payment_ids: list[UUID]):
 
 def update_payment_id_by_id(user_id: UUID, new_status: str, payment_id: UUID, updated_at: datetime):
     session = get_cassandra_session()
-
-    # 1. Update payment to PENDING status
     query = """ 
     UPDATE payment_by_id
     SET status = %s, 
@@ -426,6 +420,8 @@ def update_payment_id_by_id(user_id: UUID, new_status: str, payment_id: UUID, up
     WHERE id = %s
     IF EXISTS
     """
+
+    print("", user_id, " ", new_status, " ", payment_id, " ", updated_at)
     statements = SimpleStatement(
         query
     )
@@ -745,5 +741,76 @@ def get_amount_by_id(ids: list[UUID]):
 
     return total_amount
 
+def get_batch_by_batch_id(batch_id: str):
+    session = get_cassandra_session()
+
+    query = """ 
+        SELECT *
+        FROM payment_batch_message_by_id
+        WHERE batch_id = %s
+        ALLOW FILTERING;
+        """
+    statements = SimpleStatement(
+        query
+    )
+    result = session.execute(
+        statements,
+        (batch_id,)
+    )
+    row = result.one()
+    print (row)
+    return row
+
+def get_payment_by_ids(payment_ids: list[UUID], user_id: UUID):
+        session = get_cassandra_session()
+
+        placeholders = ', '.join(['%s'] * len(payment_ids))
+
+        query = f""" 
+           SELECT *
+           FROM payment_by_id
+           WHERE id IN ({placeholders})
+           ALLOW FILTERING;
+           """
+        statements = SimpleStatement(
+            query
+        )
+        result = session.execute(
+            statements,
+            payment_ids
+        )
+        items = []
+
+
+        for row in result.current_rows:
+            created_by_user = get_user_by_id(row["created_by"])
+            updated_by_user = get_user_by_id(row["updated_by"])
+            print("row", row)
+            items.append(
+                PaymentItem(
+                    id=str(row["id"]),
+                    status=row.get("status"),
+                    created_at=row["created_at"].replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                    amount=row["amount"],
+                    currency=row["currency"],
+                    execute_date=row["execute_date"].replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+                    end_to_end_id=row["end_to_end_id"],
+                    remittance=row["remittance"],
+                    charge_bearer=row["charge_bearer"],
+                    debtor_name=row["debtor_name"],
+                    debtor_bic=row["debtor_bic"],
+                    debtor_iban=row["debtor_iban"],
+                    creditor_name=row["creditor_name"],
+                    creditor_bic=row["creditor_bic"],
+                    creditor_iban=row["creditor_iban"],
+                    created_by=created_by_user["full_name_en"],
+                    updated_by=updated_by_user["full_name_en"],
+                    transaction_no=row["transaction_no"],
+                )
+            )
+
+        return items
 
 
