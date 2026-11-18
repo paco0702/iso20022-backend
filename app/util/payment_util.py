@@ -82,3 +82,14 @@ def convert_amount_to_hkd(amount: float, currency: str) -> float:
         return amount
 
     return round(amount * rate)
+
+
+def convert_hkd_amount_to_currency(amount: float, currency: str) -> float:
+    currency = currency.upper()
+
+    rate = EXCHANGE_RATES_TO_HKD.get(currency)
+    if rate is None:
+        print("Currency not in the list")
+        return amount
+
+    return round(amount/ rate)

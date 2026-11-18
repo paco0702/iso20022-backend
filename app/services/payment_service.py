@@ -148,15 +148,24 @@ def update_payment(user_id: UUID, payment_id: UUID, payment_status: str):
 
 
 async def create_batch (user_id: UUID, request: CreateBatchRequest):
+    if not request.payment_ids:
+        raise HTTPException(status_code=400, detail="Empty payment list.")
+
     converted_payment_ids = [UUID(payment_id) for payment_id in request.payment_ids]
     exists_all = all_payment_by_ids_exists(converted_payment_ids)
-    total_amount = get_total_amount_by_payment_ids(converted_payment_ids)
+    payment_amounts = get_total_amount_by_payment_ids(converted_payment_ids)
+    total_amount = 0
+    print("Payment amounts", payment_amounts)
+    for amount in payment_amounts:
+        converted_amount = payment_util.convert_amount_to_hkd(float(amount['amount']), amount['currency'])
+        total_amount += converted_amount
 
     cleaned_xml_content = xml_util.clean_up_xml_content(request.xml_content)
     request.xml_content = cleaned_xml_content
 
     if not exists_all:
         raise HTTPException(status_code=400, detail="Not all payment ids exist")
+
 
     async with httpx.AsyncClient() as client:
         try:
@@ -191,6 +200,7 @@ async def create_batch (user_id: UUID, request: CreateBatchRequest):
             if not all_accepted and not all_rejected:
                 batch_status = "partial_accepted"
 
+            print("converted payment ids:", converted_payment_ids)
             payment_batch = {
                 "id": uuid.uuid4(),
                 "batch_id": request.batch_id,
@@ -267,6 +277,17 @@ def retrieve_batch_by_batch_id (user_id: UUID, batch_id: str):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,)
 
     payments = get_payment_by_ids(payment_ids, user_id)
+    no_of_rejected = 0
+    no_of_accepted = 0
+
+    for payment in payments:
+        if payment.status == "rejected":
+            no_of_rejected += 1
+        if payment.status == "accepted":
+            no_of_accepted += 1
+
+    batch["no_of_rejected"] = no_of_rejected
+    batch["no_of_accepted"] = no_of_accepted
 
     return {
         "batch_details": batch,

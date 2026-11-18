@@ -9,7 +9,7 @@ from app.db.cassandra import get_cassandra_session
 from app.repositories.user_repository import get_user_by_id
 from app.schemas.common import Pagination
 from app.schemas.payment import GetPaymentResponse, PaymentItem, PaymentBatchItem, GetPaymentBatchResponse
-
+from app.util.payment_util import convert_hkd_amount_to_currency
 
 def insert_payment_by_id(payment) -> bool:
     session = get_cassandra_session()
@@ -389,7 +389,7 @@ def get_total_amount_by_payment_ids( payment_ids: list[UUID]):
     placeholders = ', '.join(['%s'] * len(payment_ids))
 
     query = f""" 
-    SELECT SUM(amount) AS total_amount
+    SELECT amount, currency
     FROM payment_by_id
     WHERE id IN ({placeholders})
     ALLOW FILTERING;
@@ -402,11 +402,11 @@ def get_total_amount_by_payment_ids( payment_ids: list[UUID]):
         payment_ids
     )
 
-    row = result.one()
+    row = result.all()
     if row is None:
         return False
 
-    return row["total_amount"]
+    return row
 
 
 
@@ -758,8 +758,22 @@ def get_batch_by_batch_id(batch_id: str):
         (batch_id,)
     )
     row = result.one()
-    print (row)
-    return row
+
+    return {
+        "id": row["id"],
+        "batch_id": row["batch_id"],
+        "xml_content": row["batch_message"],
+        "batch_name": row["batch_name"],
+        "batch_type": row["batch_type"],
+        "created_at": row["created_at"].replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+        "updated_at": row["updated_at"].replace(tzinfo=timezone.utc)
+                    .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
+        "payment_ids": row["payment_ids"],
+        "total_amount": row["total_amount"],
+        "created_by": get_user_by_id(row["created_by"])["full_name_en"],
+        "updated_by": get_user_by_id(row["updated_by"])["full_name_en"],
+    }
 
 def get_payment_by_ids(payment_ids: list[UUID], user_id: UUID):
         session = get_cassandra_session()
@@ -785,14 +799,13 @@ def get_payment_by_ids(payment_ids: list[UUID], user_id: UUID):
         for row in result.current_rows:
             created_by_user = get_user_by_id(row["created_by"])
             updated_by_user = get_user_by_id(row["updated_by"])
-            print("row", row)
             items.append(
                 PaymentItem(
                     id=str(row["id"]),
                     status=row.get("status"),
                     created_at=row["created_at"].replace(tzinfo=timezone.utc)
                     .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
-                    amount=row["amount"],
+                    amount=convert_hkd_amount_to_currency(float(row["amount"]), row["currency"]),
                     currency=row["currency"],
                     execute_date=row["execute_date"].replace(tzinfo=timezone.utc)
                     .astimezone(ZoneInfo("Asia/Hong_Kong")).isoformat(),
